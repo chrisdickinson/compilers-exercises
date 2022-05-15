@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "infix-to-postfix"
+name = "compilers"
 version = "0.1.0"
