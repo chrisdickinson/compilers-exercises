@@ -1,4 +1,4 @@
-use crate::io::{itoa, puts};
+use crate::io::{itoa, eputs, flush};
 
 #[cfg(target_arch = "aarch64")]
 pub(crate) unsafe fn syscall3(syscall_number: u64, arg0: usize, arg1: usize, arg2: usize) -> usize {
@@ -16,6 +16,7 @@ pub(crate) unsafe fn syscall3(syscall_number: u64, arg0: usize, arg1: usize, arg
 
 #[cfg(target_arch = "aarch64")]
 pub(crate) fn exit(code: i32) -> ! {
+    flush();
     let syscall_number: u64 = 1;
     unsafe {
         core::arch::asm!(
@@ -32,18 +33,19 @@ fn eh_personality() {}
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
-    if let Some(ref s) = panic_info.payload().downcast_ref::<&str>() {
-        puts("panic: \"");
-        puts(s);
-        puts("\"\n");
+    flush();
+    if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+        eputs("panic: \"");
+        eputs(s);
+        eputs("\"\n");
     }
 
     if let Some(loc) = panic_info.location() {
-        puts("panic: in \"");
-        puts(loc.file());
-        puts("\" at line ");
-        puts(itoa(loc.line()));
-        puts("\n");
+        eputs("panic: in \"");
+        eputs(loc.file());
+        eputs("\" at line ");
+        eputs(itoa(loc.line()));
+        eputs("\n");
     }
 
     exit(1);

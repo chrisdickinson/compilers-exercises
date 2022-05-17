@@ -5,7 +5,7 @@
 mod io;
 mod sys;
 
-use crate::io::{getc, putc};
+use crate::io::{getc, putc, puts};
 use crate::sys::exit;
 
 /* expr ::= expr + term | expr - term | term
@@ -76,6 +76,7 @@ fn term() {
 
 #[no_mangle]
 pub unsafe extern "C" fn main() {
+    puts("hello world\n");
     r#match('\0');
     expr();
     putc('\n');
