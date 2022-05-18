@@ -4,6 +4,7 @@
 
 mod io;
 mod sys;
+mod regex;
 
 use crate::io::{getc, putc, puts};
 use crate::sys::exit;
@@ -75,7 +76,75 @@ fn term() {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn main() {
+pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
+
+    use crate::regex::NFA;
+    use crate::io::itoa;
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"a");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"a*");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"apple");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"apple*");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"(apple|banana)*");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(all())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"apple|banana*");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"apple|banana");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"apple|banana|cat");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"(apple|banana)|cat");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    exit(1);
     puts("hello world\n");
     r#match('\0');
     expr();

@@ -1,8 +1,9 @@
 use crate::sys::syscall3;
 use core::convert::From;
+use core::cmp::Ordering;
 
 static mut STDIN: Option<InputBuffer<4096>> = None;
-static mut STDOUT: Option<OutputBuffer<4>> = None;
+static mut STDOUT: Option<OutputBuffer<4096>> = None;
 static mut STDERR: Option<OutputBuffer<4096>> = None;
 
 fn dbgput<T: AsRef<[u8]>>(ch: T) -> usize {
@@ -202,12 +203,11 @@ impl<const N: usize> OutputBuffer<N> {
         // | 12                | 14               | write N-13 bytes starting at 15; update cursor to N-1
         // | 15                | 1                | write 14 bytes; update cursor to 14
         Some(match self.next_write_idx.cmp(&self.last_flushed_idx) {
-            core::cmp::Ordering::Equal => {
-                // technically, this should never happen.
-                0
+            Ordering::Equal => {
+                panic!("next_write_idx matches last_flushed_idx; this should never happen")
             },
 
-            core::cmp::Ordering::Less => {
+            Ordering::Less => {
                 if self.last_flushed_idx == Self::MODULO_MASK {
                     let slice = &self.buf[0..self.next_write_idx];
                     if slice.is_empty() {
@@ -229,7 +229,7 @@ impl<const N: usize> OutputBuffer<N> {
                 }
             }
 
-            core::cmp::Ordering::Greater => {
+            Ordering::Greater => {
                 let slice = &self.buf[self.last_flushed_idx + 1..self.next_write_idx];
                 if slice.is_empty() {
                     return None

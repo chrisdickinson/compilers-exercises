@@ -28,9 +28,11 @@ pub(crate) fn exit(code: i32) -> ! {
     }
 }
 
+#[cfg(not(test))]
 #[lang = "eh_personality"]
 fn eh_personality() {}
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
     flush();
