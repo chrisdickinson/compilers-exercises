@@ -83,6 +83,15 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
 
     #[cfg(any())]
     {
+        // empty
+        let nfa = NFA::<256>::from_regex_bytes(b"");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        // single char
         let nfa = NFA::<256>::from_regex_bytes(b"a");
         nfa.debug_print();
         exit(1);
@@ -90,13 +99,15 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
 
     #[cfg(any())]
     {
-        let nfa = NFA::<256>::from_regex_bytes(b"a*");
+        // product
+        let nfa = NFA::<256>::from_regex_bytes(b"ab");
         nfa.debug_print();
         exit(1);
     }
 
     #[cfg(any())]
     {
+        // product * 5
         let nfa = NFA::<256>::from_regex_bytes(b"apple");
         nfa.debug_print();
         exit(1);
@@ -104,6 +115,15 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
 
     #[cfg(any())]
     {
+        // kleene star
+        let nfa = NFA::<256>::from_regex_bytes(b"a*");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        // product + kleene star on last char
         let nfa = NFA::<256>::from_regex_bytes(b"apple*");
         nfa.debug_print();
         exit(1);
@@ -111,20 +131,15 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
 
     #[cfg(any())]
     {
-        let nfa = NFA::<256>::from_regex_bytes(b"(apple|banana)*");
-        nfa.debug_print();
-        exit(1);
-    }
-
-    #[cfg(all())]
-    {
-        let nfa = NFA::<256>::from_regex_bytes(b"apple|banana*");
+        // multiple stars, products
+        let nfa = NFA::<256>::from_regex_bytes(b"ap*le*");
         nfa.debug_print();
         exit(1);
     }
 
     #[cfg(any())]
     {
+        // alternate
         let nfa = NFA::<256>::from_regex_bytes(b"apple|banana");
         nfa.debug_print();
         exit(1);
@@ -132,7 +147,47 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
 
     #[cfg(any())]
     {
+        // alternate, star on last a
+        let nfa = NFA::<256>::from_regex_bytes(b"apple|banana*");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        // alternate, interstital stars
+        let nfa = NFA::<256>::from_regex_bytes(b"ap*le|bana*na");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        // multiple alternate
         let nfa = NFA::<256>::from_regex_bytes(b"apple|banana|cat");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        // group concat
+        let nfa = NFA::<256>::from_regex_bytes(b"wow(apple)cat");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(all())]
+    {
+        // group alternate concat
+        let nfa = NFA::<256>::from_regex_bytes(b"(apple|banana) cat");
+        nfa.debug_print();
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"(apple|banana)*");
         nfa.debug_print();
         exit(1);
     }

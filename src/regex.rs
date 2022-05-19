@@ -22,7 +22,7 @@ impl Default for State {
 }
 
 impl State {
-    const fn add_transition(mut self, on_character: Option<u8>, to_state_idx: usize) -> Self {
+    /*const*/fn add_transition(mut self, on_character: Option<u8>, to_state_idx: usize) -> Self {
         self.transitions[self.transition_count].on_character = on_character;
         self.transitions[self.transition_count].to_state_idx = to_state_idx;
         self.transition_count += 1;
@@ -76,9 +76,9 @@ impl<const N: usize> NFA<N> {
         puts("}\n");
     }
 
-    pub(crate) const fn from_regex_bytes(input: &'static [u8]) -> Self {
+    pub(crate) /*const*/fn from_regex_bytes(input: &'static [u8]) -> Self {
         // I sure wish we could use Default::default() in const functions.
-        let mut nfa = Self {
+        let nfa = Self {
             states: [State {
                 transition_count: 0,
                 transitions: [Transition {
@@ -91,84 +91,125 @@ impl<const N: usize> NFA<N> {
             accept_idx: 0,
         };
 
-        (nfa, _) = NFA::<N>::from_regex_bytes_inner(nfa, input, 0, false);
+        let (nfa, idx) = nfa.expr(input, 0);
+        if idx != input.len() {
+            error_input_progress(input, idx);
+            panic!("unexpected character");
+        }
+
         nfa
     }
 
-    const fn from_regex_bytes_inner(mut nfa: NFA<N>, input: &'static [u8], mut idx: usize, expect_rparen: bool) -> (Self, usize) {
-        let mut escaped = false;
-
-        /* expr ::= "(" expr ")"
+    /*const*/fn expr(self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
+        /* Language:
+         *
+         *     expr ::= ε
+         *        | 𝛼 in Σ
          *        | expr "|" expr
+         *        | expr expr
          *        | expr "*"
-         *        | expr "?"
-         *        | expr "+"
-         *        | term
-         * term ::= <all characters except for "|?*()+^$\"> | "\" <any of "|?*()+^$\">
+         *        | "(" expr ")"
+         *
+         * Rewritten to avoid left recursion:
+         *
+         *     expr -> term rest
+         *     rest -> "|" expr
+         *           | "*" expr
+         *           | "(" expr ")"
+         *           | "\\" term
+         *           | term
+         *     term -> "\\" <any>
+         *           | 𝛼 in Σ
+         *           | ε
          */
+        if idx == input.len() {
+            return (self, idx)
+        }
+
+        let mut nfa = self;
 
         while idx < input.len() {
-            match input[idx] {
-                b'(' if !escaped => { // "(" s ")"; match until )
-                    idx += 1;
-
-                    (nfa, idx) = NFA::<N>::from_regex_bytes_inner(nfa, input, idx, true);
-                }
-
-                b')' if !escaped && expect_rparen => {
-                    idx += 1;
-                    return (nfa, idx)
-                }
-
-                b')' if !escaped && !expect_rparen => {
-                    return (nfa, idx)
-                }
-
-                b'|' if !escaped => {
-                    idx += 1;
-
-                    // preserve the current start and end
-                    let prev_start_idx = nfa.start_idx;
-                    let prev_accept_idx = nfa.accept_idx;
-
-                    // reset NFA to empty state
-                    nfa.accept_idx = nfa.state_count;
-                    nfa.start_idx = nfa.state_count;
-                    nfa.state_count += 2;
-
-                    (nfa, idx) = NFA::<N>::from_regex_bytes_inner(nfa, input, idx, false);
-
-                    nfa = nfa.or(prev_start_idx, prev_accept_idx);
-                }
-
-                b'*' if !escaped => {
-                    idx += 1;
-                    nfa = nfa.kleene_star();
-                }
-
-                // not yet impl
-                b'+' if !escaped => {
-                    idx += 1;
-                }
-
-                b'\\' if !escaped => { // escape next char
-                    idx += 1;
-                    escaped = true;
-                }
-
-                0 => {
-                    return (nfa, input.len())
-                }
-
-                c => {
-                    escaped = false;
-                    idx += 1;
-                    nfa = nfa.product(c);
-                }
+            let last_idx = idx;
+            (nfa, idx) = nfa.term(input, idx);
+            (nfa, idx) = nfa.rest(input, idx);
+            if last_idx == idx {
+                return (nfa, idx)
             }
         }
 
         (nfa, input.len())
+    }
+
+    /*const*/fn rest(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+        if idx >= input.len() {
+            return (self, idx)
+        }
+
+        match input[idx] {
+            b'|' => self.alternate(input, idx),
+            b'*' => self.kleene_star(input, idx),
+            b'(' => self.group(input, idx),
+            b'\\' => self.escaped_term(input, idx + 1),
+
+            // 3.b: for the regular expression "st", construct an NFA:
+            //
+            //                 +-------+------+
+            //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
+            //                 +-------+------+
+            //
+            _ => return (self, idx)
+        }
+    }
+
+    /*const*/fn term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+        if idx >= input.len() {
+            return (self.add_empty_term(), idx)
+        }
+
+        match input[idx] {
+            // Positively match the characters we expect from Σ.
+            chara @ (
+                b'a'..=b'z' |
+                b'A'..=b'Z' |
+                b'0'..=b'9' |
+                b'!' | b'@' |
+                b'#' | b'%' |
+                b'&' | b'-' |
+                b'=' | b'+' |
+                b';' | b':' |
+                b'"' | b',' |
+                b'<' | b'>' |
+                b'/' | b'`' |
+                b'~' | b' ' |
+                b'\''
+
+            ) => (self.add_alphabet_term(chara), idx + 1),
+
+            _ => (self.add_empty_term(), idx)
+        }
+    }
+
+    /*const*/fn escaped_term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+        if idx >= input.len() {
+            panic!("unexpected end of input: expected escaped character");
+        }
+
+        match input[idx] {
+            b'n' => (self.add_alphabet_term(b'\n'), idx + 1),
+            b't' => (self.add_alphabet_term(b'\t'), idx + 1),
+
+            chara @ (
+                b'$' | b'^' |
+                b'(' | b')' |
+                b'{' | b'}' |
+                b'[' | b']' |
+                b'|' | b'?' |
+                b'*' | 
+                b'\\'
+            ) => (self.add_alphabet_term(chara), idx + 1),
+
+            _ => panic!("unexpected escaped character value")
+        }
     }
 
     // Rule 1: For ε, construct an NFA where "i" is a new start state and "f" is a new accepting
@@ -178,8 +219,10 @@ impl<const N: usize> NFA<N> {
     //     start ----> | i | ---> ‖ f ‖
     //                 +---+      +===+
     //
-    // [Ed. Note: I've combined rules 2 and 3.b since they are... sort of the same rule.]
-    //
+    /*const*/fn add_empty_term(self) -> Self {
+        self.add_term(None)
+    }
+
     // Rule 2: For a in Σ, construct an NFA where "i" is a new start state and "f" is a new accepting
     // state. This NFA recognizes the character represented by "a".
     // 
@@ -187,26 +230,18 @@ impl<const N: usize> NFA<N> {
     //     start ----> | i | ---> ‖ f ‖
     //                 +---+      +===+
     //
-    // 3.b: for the regular expression "st", construct an NFA:
-    //
-    //                 +-------+------+
-    //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
-    //                 +-------+------+
-    //
-    const fn product(mut self, chara: u8) -> Self {
-        // our start state is the same.
-        // create a transition from our current accept node to a new accept node via "a"
+    /*const*/fn add_alphabet_term(self, chara: u8) -> Self {
+        self.add_term(Some(chara))
+    }
 
-        // TKTK: I think there's a bug here: the book sez we shouldn't _add_ a state here, we
-        // should merge the current accept state into the incoming start state.
-        self.states[self.accept_idx] = self.states[self.accept_idx].add_transition(Some(chara), self.state_count);
+    /*const*/fn add_term(mut self, chara: Option<u8>) -> Self {
+        self.states[self.accept_idx] = self.states[self.accept_idx].add_transition(chara, self.state_count);
         self.accept_idx = self.state_count;
         self.state_count += 1;
-
         self
     }
 
-    // 3.a: for the regular expression s|t, construct an NFA:
+    // Rule 3.a: for the regular expression s|t, construct an NFA:
     //
     //                prev start      prev accept
     //                         ↓      ↓
@@ -222,31 +257,39 @@ impl<const N: usize> NFA<N> {
     //                         ↑      ↑
     //            self.start_idx      self.accept_idx
     //
-    const fn or(mut self, prev_start_idx: usize, prev_accept_idx: usize) -> Self {
+    /*const*/fn alternate(mut self, input: &'static [u8], idx: usize) -> (Self, usize) {
+        let prev_start_idx = self.start_idx;
+        let prev_accept_idx = self.accept_idx;
+
+        self.start_idx = self.state_count;
+        self.accept_idx = self.state_count;
+        self.state_count += 1;
+
+        let (mut nfa, idx) = self.expr(input, idx + 1);
+
         // 1. alloc two new states: i & f
         // 2. add two transitions from i on ε; one to prev_start_idx, and one to start_idx
         // 3. add transition from prev_accept to f
         // 4. add transition from nfa.accept_idx to f
         // 5. set nfa.start_idx to i
         // 6. set nfa.accept_idx to f
+        let i_idx = nfa.state_count;
+        let f_idx = nfa.state_count + 1;
+        nfa.state_count += 2;
 
-        let i_idx = self.state_count;
-        let f_idx = self.state_count + 1;
-        self.state_count += 2;
+        nfa.states[i_idx] = nfa.states[i_idx].add_transition(None, prev_start_idx);
+        nfa.states[i_idx] = nfa.states[i_idx].add_transition(None, nfa.start_idx);
 
-        self.states[i_idx] = self.states[i_idx].add_transition(None, prev_start_idx);
-        self.states[i_idx] = self.states[i_idx].add_transition(None, self.start_idx);
+        nfa.states[prev_accept_idx] = nfa.states[prev_accept_idx].add_transition(None, f_idx);
+        nfa.states[nfa.accept_idx] = nfa.states[nfa.accept_idx].add_transition(None, f_idx);
 
-        self.states[prev_accept_idx] = self.states[prev_accept_idx].add_transition(None, f_idx);
-        self.states[self.accept_idx] = self.states[self.accept_idx].add_transition(None, f_idx);
+        nfa.start_idx = i_idx;
+        nfa.accept_idx = f_idx;
 
-        self.start_idx = i_idx;
-        self.accept_idx = f_idx;
-
-        self
+        (nfa, idx)
     }
 
-    // 3.c: for the regular expression s*, construct an NFA:
+    // Rule 3.c: for the regular expression s*, construct an NFA:
     //
     //                            +-------------+
     //                            |      ε      |
@@ -256,7 +299,7 @@ impl<const N: usize> NFA<N> {
     //                       ↘︎    +-------------+   ↗︎
     //                         ↘︎                  ↗︎
     //                             --->  ε  --->
-    const fn kleene_star(mut self) -> Self {
+    /*const*/fn kleene_star(mut self, input: &'static [u8], idx: usize) -> (Self, usize) {
         // 1. alloc two new states: i & f
         // 2. add a transition from i to start_idx on ε
         // 3. add a transition from i to f on ε
@@ -277,11 +320,38 @@ impl<const N: usize> NFA<N> {
         self.start_idx = i_idx;
         self.accept_idx = f_idx;
 
-        self
+        self.expr(input, idx + 1)
     }
 
-    // TKTKTK
-    const fn one_or_more(mut self, lhs: ()) -> Self {
-        self
+    // Rule 3.d: for the regular expression (s), construct NFA(s), consuming the left and right parens.
+    /*const*/fn group(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+        if input[idx] != b'(' {
+            panic!("expected '('");
+        }
+
+        let (nfa, idx) = self.expr(input, idx + 1);
+
+        if idx >= input.len() {
+            panic!("unexpected end of input: expected ')'");
+        }
+
+        if input[idx] != b')' {
+            panic!("unterminated group, expected ')'");
+        }
+
+        (nfa, idx + 1)
     }
 }
+
+fn error_input_progress(input: &'static [u8], idx: usize) {
+    use crate::io::{itoa, eputs};
+    eputs(input);
+    eputs("\n");
+    if idx > 0 {
+        for i in 0..idx {
+            eputs("~");
+        }
+    }
+    eputs("^\n");
+}
+
