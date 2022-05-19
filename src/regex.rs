@@ -54,15 +54,19 @@ impl<const N: usize> Default for NFA<N> {
 // Output: an NFA N accepting L(r)
 impl<const N: usize> NFA<N> {
 
-    pub(crate) fn debug_print(&self) {
+    pub(crate) fn debug_print(&self, prefix: &'static [u8]) {
         use crate::io::{ itoa, puts };
 
-        puts("digraph {\n");
-        puts("  S"); puts(itoa(self.start_idx as u32)); puts(" [shape=box];\n");
-        puts("  S"); puts(itoa(self.accept_idx as u32)); puts(" [shape=doublecircle];\n");
+        puts("subgraph "); puts(prefix); puts(" {\n");
+        puts("  label = \""); puts(prefix); puts("\";\n");
+        puts("  rankdir=\"LR\";\n");
+        puts("  "); puts(prefix); puts(itoa(self.start_idx as u32)); puts(" [shape=box];\n");
+        puts("  "); puts(prefix); puts(itoa(self.accept_idx as u32)); puts(" [shape=doublecircle];\n");
         for (idx, state) in self.states[0..self.state_count].iter().enumerate() {
             for transition in &state.transitions[0..state.transition_count] {
-                puts("  S"); puts(itoa(idx as u32)); puts(" -> "); puts("S"); puts(itoa(transition.to_state_idx as u32));
+
+                puts("  "); puts(prefix); puts(itoa(transition.to_state_idx as u32)); puts("[label=\"S"); puts(itoa(transition.to_state_idx as u32)); puts("\"];\n");
+                puts("  "); puts(prefix); puts(itoa(idx as u32)); puts(" -> ");  puts(prefix); puts(itoa(transition.to_state_idx as u32));
 
                 puts("[label=\"");
                 if let Some(byte) = transition.on_character {
@@ -150,13 +154,6 @@ impl<const N: usize> NFA<N> {
             b'*' => self.kleene_star(input, idx),
             b'(' => self.group(input, idx),
             b'\\' => self.escaped_term(input, idx + 1),
-
-            // 3.b: for the regular expression "st", construct an NFA:
-            //
-            //                 +-------+------+
-            //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
-            //                 +-------+------+
-            //
             _ => return (self, idx)
         }
     }
@@ -185,7 +182,7 @@ impl<const N: usize> NFA<N> {
 
             ) => (self.add_alphabet_term(chara), idx + 1),
 
-            _ => (self.add_empty_term(), idx)
+            _ => (self, idx)
         }
     }
 
@@ -288,6 +285,13 @@ impl<const N: usize> NFA<N> {
 
         (nfa, idx)
     }
+
+    // 3.b: for the regular expression "st", construct an NFA:
+    //
+    //                 +-------+------+
+    //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
+    //                 +-------+------+
+    //
 
     // Rule 3.c: for the regular expression s*, construct an NFA:
     //
