@@ -145,27 +145,19 @@ impl<const N: usize> NFA<N> {
     }
 
     /*const*/fn rest(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        if idx >= input.len() {
-            return (self, idx)
-        }
-
-        match input[idx] {
-            b'|' => self.alternate(input, idx),
-            b'*' => self.kleene_star(input, idx),
-            b'(' => self.group(input, idx),
-            b'\\' => self.escaped_term(input, idx + 1),
+        match input.get(idx) {
+            Some(b'|') => self.alternate(input, idx),
+            Some(b'*') => self.kleene_star(input, idx),
+            Some(b'(') => self.group(input, idx),
+            Some(b'\\') => self.escaped_term(input, idx + 1),
             _ => return (self, idx)
         }
     }
 
     /*const*/fn term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        if idx >= input.len() {
-            return (self.add_empty_term(), idx)
-        }
-
-        match input[idx] {
+        match input.get(idx) {
             // Positively match the characters we expect from Σ.
-            chara @ (
+            Some(chara @ (
                 b'a'..=b'z' |
                 b'A'..=b'Z' |
                 b'0'..=b'9' |
@@ -180,22 +172,20 @@ impl<const N: usize> NFA<N> {
                 b'~' | b' ' |
                 b'\''
 
-            ) => (self.add_alphabet_term(chara), idx + 1),
+            )) => (self.add_alphabet_term(*chara), idx + 1),
+
+            None => (self.add_empty_term(), idx),
 
             _ => (self, idx)
         }
     }
 
     /*const*/fn escaped_term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        if idx >= input.len() {
-            panic!("unexpected end of input: expected escaped character");
-        }
+        match input.get(idx) {
+            Some(b'n') => (self.add_alphabet_term(b'\n'), idx + 1),
+            Some(b't') => (self.add_alphabet_term(b'\t'), idx + 1),
 
-        match input[idx] {
-            b'n' => (self.add_alphabet_term(b'\n'), idx + 1),
-            b't' => (self.add_alphabet_term(b'\t'), idx + 1),
-
-            chara @ (
+            Some(chara @ (
                 b'$' | b'^' |
                 b'(' | b')' |
                 b'{' | b'}' |
@@ -203,9 +193,10 @@ impl<const N: usize> NFA<N> {
                 b'|' | b'?' |
                 b'*' | 
                 b'\\'
-            ) => (self.add_alphabet_term(chara), idx + 1),
+            )) => (self.add_alphabet_term(*chara), idx + 1),
 
-            _ => panic!("unexpected escaped character value")
+            Some(_) => panic!("unexpected escaped character value"),
+            None => panic!("unexpected end of input: expected escaped character")
         }
     }
 
@@ -335,15 +326,11 @@ impl<const N: usize> NFA<N> {
 
         let (nfa, idx) = self.expr(input, idx + 1);
 
-        if idx >= input.len() {
-            panic!("unexpected end of input: expected ')'");
+        if let Some(b')') = input.get(idx) {
+            return (nfa, idx + 1)
         }
 
-        if input[idx] != b')' {
-            panic!("unterminated group, expected ')'");
-        }
-
-        (nfa, idx + 1)
+        panic!("unterminated group, expected ')'");
     }
 }
 
