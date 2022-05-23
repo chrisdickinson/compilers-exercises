@@ -135,7 +135,6 @@ impl<const N: usize> NFA<N> {
         //
         dbgnfa(b"expr", &self);
         let (mut nfa, mut idx) = self.term(input, idx);
-        let start_idx = nfa.start_idx;
 
         while idx < input.len() {
             let last_idx = idx;
@@ -145,7 +144,6 @@ impl<const N: usize> NFA<N> {
                 return (nfa, idx)
             }
         }
-        nfa.start_idx = start_idx;
 
         (nfa, input.len())
     }
@@ -171,14 +169,16 @@ impl<const N: usize> NFA<N> {
         dbgnfa(b"rest", &self);
         let (mut nfa, mut idx) = (self, idx);
 
+        let last_start_idx = nfa.start_idx;
         let last_accept_idx = nfa.accept_idx;
-        (nfa, idx) = match input.get(idx) {
+        match input.get(idx) {
             Some(b'(') => nfa.group(input, idx),
             Some(b'|') => nfa.alternate(input, idx),
-            _ => nfa.term(input, idx)
-        };
-
-        (nfa.product(last_accept_idx), idx)
+            _ => {
+                (nfa, idx) = nfa.term(input, idx);
+                (nfa.product(last_start_idx, last_accept_idx), idx)
+            }
+        }
     }
 
     /*const*/fn escaped_term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
@@ -254,7 +254,7 @@ impl<const N: usize> NFA<N> {
 
         self.start_idx = self.state_count;
         self.accept_idx = self.state_count;
-        self.state_count += 1;
+        self.state_count += 2;
 
         let (mut nfa, idx) = self.expr(input, idx + 1);
 
@@ -286,7 +286,7 @@ impl<const N: usize> NFA<N> {
     //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
     //                 +-------+------+
     //
-    /*const*/fn product(mut self, last_accept_idx: usize) -> Self {
+    /*const*/fn product(mut self, last_start_idx: usize, last_accept_idx: usize) -> Self {
 
         // take all transitions out of start(N(t)) and add them to accept(N(s))
         // remove all transitions out of start(N(t))
@@ -296,6 +296,7 @@ impl<const N: usize> NFA<N> {
             self.states[last_accept_idx].transition_count += 1;
         }
         self.states[self.start_idx].transition_count = 0;
+        self.start_idx = last_start_idx;
         self
     }
 
