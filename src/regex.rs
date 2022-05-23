@@ -1,4 +1,3 @@
-
 const TRANSITIONS_PER_STATE: usize = 4;
 
 #[derive(Clone, Copy, Default)]
@@ -17,13 +16,13 @@ impl Default for State {
     fn default() -> Self {
         Self {
             transition_count: 0,
-            transitions: Default::default()
+            transitions: [Transition { on_character: None, to_state_idx: 0 }; TRANSITIONS_PER_STATE]
         }
     }
 }
 
 impl State {
-    /*const */fn add_transition(mut self, on_character: Option<u8>, to_state_idx: usize) -> Self {
+    const fn add_transition(mut self, on_character: Option<u8>, to_state_idx: usize) -> Self {
         self.transitions[self.transition_count].on_character = on_character;
         self.transitions[self.transition_count].to_state_idx = to_state_idx;
         self.transition_count += 1;
@@ -54,33 +53,7 @@ impl<const N: usize> Default for NFA<N> {
 // Input: a regular expression r over an alphabet Σ
 // Output: an NFA N accepting L(r)
 impl<const N: usize> NFA<N> {
-    pub(crate) fn debug_print(&self, prefix: &'static [u8]) {
-        use crate::io::{ itoa, puts };
-
-        puts("subgraph "); puts(prefix); puts(" {\n");
-        puts("  label = \""); puts(prefix); puts("\";\n");
-        puts("  rankdir=\"LR\";\n");
-        puts("  "); puts(prefix); puts(itoa(self.start_idx as u32)); puts(" [shape=box];\n");
-        puts("  "); puts(prefix); puts(itoa(self.accept_idx as u32)); puts(" [shape=doublecircle];\n");
-        for (idx, state) in self.states[0..self.state_count].iter().enumerate() {
-            for transition in &state.transitions[0..state.transition_count] {
-
-                puts("  "); puts(prefix); puts(itoa(transition.to_state_idx as u32)); puts("[label=\"S"); puts(itoa(transition.to_state_idx as u32)); puts("\"];\n");
-                puts("  "); puts(prefix); puts(itoa(idx as u32)); puts(" -> ");  puts(prefix); puts(itoa(transition.to_state_idx as u32));
-
-                puts("[label=\"");
-                if let Some(byte) = transition.on_character {
-                    puts([byte]);
-                } else {
-                    puts([0xce, 0xb5]); // epsilon
-                }
-                puts("\"];\n");
-            }
-        }
-        puts("}\n");
-    }
-
-    pub(crate) /*const */fn from_regex_bytes(input: &'static [u8]) -> Self {
+    pub(crate) const fn from_regex_bytes(input: &'static [u8]) -> Self {
         // I sure wish we could use Default::default() in const functions.
         let nfa = Self {
             states: [State {
@@ -125,7 +98,7 @@ impl<const N: usize> NFA<N> {
      *           | 𝛼 in Σ
      *           | ε
      */
-    /*const */fn expr(mut self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
+    const fn expr(mut self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
         (self, idx) = self.term(input, idx);
         while idx < input.len() {
             let last_idx = idx;
@@ -139,7 +112,7 @@ impl<const N: usize> NFA<N> {
         (self, input.len())
     }
 
-    /*const */fn term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+    const fn term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
         let (nfa, idx) = match input.get(idx) {
             None => return (self, idx),
 
@@ -160,7 +133,7 @@ impl<const N: usize> NFA<N> {
                 b'\''
             )) => (self.add_alphabet_term(*chara), idx + 1),
             _ => {
-                (self.add_empty_term(), idx)
+                return (self.add_empty_term(), idx)
             },
         };
 
@@ -171,7 +144,7 @@ impl<const N: usize> NFA<N> {
         (nfa, idx)
     }
 
-    /*const */fn rest(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+    const fn rest(self, input: &'static [u8], idx: usize) -> (Self, usize) {
         let (mut nfa, mut idx) = (self, idx);
 
         let last_start_idx = nfa.start_idx;
@@ -187,7 +160,7 @@ impl<const N: usize> NFA<N> {
         }
     }
 
-    /*const */fn escaped_term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+    const fn escaped_term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
         match input.get(idx).copied() {
             Some(b'n') => (self.add_alphabet_term(b'\n'), idx + 1),
             Some(b't') => (self.add_alphabet_term(b'\t'), idx + 1),
@@ -214,7 +187,7 @@ impl<const N: usize> NFA<N> {
     //     start ----> | i | ---> ‖ f ‖
     //                 +---+      +===+
     //
-    /*const */fn add_empty_term(self) -> Self {
+    const fn add_empty_term(self) -> Self {
         self.add_term(None)
     }
 
@@ -225,11 +198,11 @@ impl<const N: usize> NFA<N> {
     //     start ----> | i | ---> ‖ f ‖
     //                 +---+      +===+
     //
-    /*const */fn add_alphabet_term(self, chara: u8) -> Self {
+    const fn add_alphabet_term(self, chara: u8) -> Self {
         self.add_term(Some(chara))
     }
 
-    /*const */fn add_term(mut self, chara: Option<u8>) -> Self {
+    const fn add_term(mut self, chara: Option<u8>) -> Self {
         // create two states: i and f; link them
         self.start_idx = self.state_count;
         self.accept_idx = self.state_count + 1;
@@ -254,7 +227,7 @@ impl<const N: usize> NFA<N> {
     //                         ↑      ↑
     //            self.start_idx      self.accept_idx
     //
-    /*const */fn alternate(mut self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
+    const fn alternate(mut self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
         let prev_start_idx = self.start_idx;
         let prev_accept_idx = self.accept_idx;
 
@@ -292,7 +265,7 @@ impl<const N: usize> NFA<N> {
     //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
     //                 +-------+------+
     //
-    /*const */fn product(mut self, last_start_idx: usize, last_accept_idx: usize) -> Self {
+    const fn product(mut self, last_start_idx: usize, last_accept_idx: usize) -> Self {
         // take all transitions out of start(N(t)) and add them to accept(N(s))
         // remove all transitions out of start(N(t))
 
@@ -317,7 +290,7 @@ impl<const N: usize> NFA<N> {
     //                       ↘︎    +-------------+   ↗︎
     //                         ↘︎                  ↗︎
     //                             --->  ε  --->
-    /*const */fn kleene_star(mut self) -> Self {
+    const fn kleene_star(mut self) -> Self {
         // 1. alloc two new states: i & f
         // 2. add a transition from i to start_idx on ε
         // 3. add a transition from i to f on ε
@@ -342,7 +315,7 @@ impl<const N: usize> NFA<N> {
     }
 
     // Rule 3.d: for the regular expression (s), construct NFA(s), consuming the left and right parens.
-    /*const */fn group(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+    const fn group(self, input: &'static [u8], idx: usize) -> (Self, usize) {
         if input[idx] != b'(' {
             panic!("expected '('");
         }
@@ -356,6 +329,32 @@ impl<const N: usize> NFA<N> {
         }
 
         panic!("unterminated group, expected ')'");
+    }
+
+    pub(crate) fn debug_print(&self, prefix: &'static [u8]) {
+        use crate::io::{ itoa, puts };
+
+        puts("subgraph "); puts(prefix); puts(" {\n");
+        puts("  label = \""); puts(prefix); puts("\";\n");
+        puts("  rankdir=\"LR\";\n");
+        puts("  "); puts(prefix); puts(itoa(self.start_idx as u32)); puts(" [shape=box];\n");
+        puts("  "); puts(prefix); puts(itoa(self.accept_idx as u32)); puts(" [shape=doublecircle];\n");
+        for (idx, state) in self.states[0..self.state_count].iter().enumerate() {
+            for transition in &state.transitions[0..state.transition_count] {
+
+                puts("  "); puts(prefix); puts(itoa(transition.to_state_idx as u32)); puts("[label=\"S"); puts(itoa(transition.to_state_idx as u32)); puts("\"];\n");
+                puts("  "); puts(prefix); puts(itoa(idx as u32)); puts(" -> ");  puts(prefix); puts(itoa(transition.to_state_idx as u32));
+
+                puts("[label=\"");
+                if let Some(byte) = transition.on_character {
+                    puts([byte]);
+                } else {
+                    puts([0xce, 0xb5]); // epsilon
+                }
+                puts("\"];\n");
+            }
+        }
+        puts("}\n");
     }
 }
 
@@ -400,12 +399,13 @@ fn dbgnfa<const N: usize>(prefix: &[u8], nfa: &NFA<N>) {
     flush();
 }
 
+#[allow(dead_code)]
 fn error_input_progress(input: &'static [u8], idx: usize) {
-    use crate::io::{itoa, eputs, flush};
+    use crate::io::{eputs, flush};
     eputs(input);
     eputs("\n");
     if idx > 0 {
-        for i in 0..idx {
+        for _ in 0..idx {
             eputs("~");
         }
     }

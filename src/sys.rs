@@ -1,4 +1,6 @@
-use crate::io::{itoa, eputs, flush};
+#[cfg(not(test))]
+use crate::io::{itoa, eputs};
+use crate::io::flush;
 
 #[cfg(target_arch = "aarch64")]
 pub(crate) unsafe fn syscall3(syscall_number: u64, arg0: usize, arg1: usize, arg2: usize) -> usize {

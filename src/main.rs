@@ -14,7 +14,6 @@ use crate::sys::exit;
 /* expr ::= expr + term | expr - term | term
  * term ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
  *
- *
  * expr -> term rest
  * rest -> + expr | - expr | ε
  * term -> 0..9
@@ -78,10 +77,8 @@ fn term() {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
-
+pub unsafe extern "C" fn main() {
     use crate::regex::NFA;
-    use crate::io::itoa;
 
     puts("digraph {\n");
     puts("rankdir=\"TB\";\n");
@@ -102,7 +99,7 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
         exit(1);
     }
 
-    #[cfg(all())]
+    #[cfg(any())]
     {
         let nfa = NFA::<256>::from_regex_bytes(b"(x|y|z)*");
         nfa.debug_print(b"problem");
