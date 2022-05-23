@@ -145,35 +145,37 @@ impl<const N: usize> NFA<N> {
     }
 
     /*const*/fn rest(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        match input.get(idx) {
-            Some(b'|') => self.alternate(input, idx),
-            Some(b'*') => self.kleene_star(input, idx),
-            Some(b'(') => self.group(input, idx),
-            Some(b'\\') => self.escaped_term(input, idx + 1),
-            _ => return (self, idx)
+        let (mut nfa, mut idx) = (self, idx);
+
+        loop {
+            (nfa, idx) = match input.get(idx) {
+                Some(b'|') => nfa.alternate(input, idx),
+                Some(b'(') => nfa.group(input, idx),
+                Some(b'\\') => nfa.escaped_term(input, idx + 1),
+                Some(b'*') => (nfa.kleene_star(), idx + 1),
+
+                Some(chara) if is_term_char(chara) => {
+
+                    // artificially bind
+                    match input.get(idx + 1) {
+                        Some(b'*') => {
+                            nfa = nfa.add_alphabet_term(*chara).kleene_star();
+
+                            (nfa, idx + 2)
+                        },
+                        _ => (nfa.product(Some(*chara)), idx + 1)
+                    }
+                    // (nfa.product(Some(*chara)), idx + 1)
+                },
+
+                _ => return (nfa, idx)
+            };
         }
     }
 
     /*const*/fn term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
         match input.get(idx) {
-            // Positively match the characters we expect from Σ.
-            Some(chara @ (
-                b'a'..=b'z' |
-                b'A'..=b'Z' |
-                b'0'..=b'9' |
-                b'!' | b'@' |
-                b'#' | b'%' |
-                b'&' | b'-' |
-                b'=' | b'+' |
-                b';' | b':' |
-                b'"' | b',' |
-                b'<' | b'>' |
-                b'/' | b'`' |
-                b'~' | b' ' |
-                b'\''
-
-            )) => (self.add_alphabet_term(*chara), idx + 1),
-
+            Some(chara) if is_term_char(chara) => (self.add_alphabet_term(*chara), idx + 1),
             None => (self.add_empty_term(), idx),
 
             _ => (self, idx)
@@ -181,9 +183,9 @@ impl<const N: usize> NFA<N> {
     }
 
     /*const*/fn escaped_term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        match input.get(idx) {
-            Some(b'n') => (self.add_alphabet_term(b'\n'), idx + 1),
-            Some(b't') => (self.add_alphabet_term(b'\t'), idx + 1),
+        match input.get(idx).copied() {
+            Some(b'n') => (self.product(Some(b'\n')), idx + 1),
+            Some(b't') => (self.product(Some(b'\t')), idx + 1),
 
             Some(chara @ (
                 b'$' | b'^' |
@@ -193,10 +195,10 @@ impl<const N: usize> NFA<N> {
                 b'|' | b'?' |
                 b'*' | 
                 b'\\'
-            )) => (self.add_alphabet_term(*chara), idx + 1),
+            )) => (self.product(Some(chara)), idx + 1),
 
-            Some(_) => panic!("unexpected escaped character value"),
-            None => panic!("unexpected end of input: expected escaped character")
+            None => panic!("unexpected end of input: expected escaped character"),
+            _ => panic!("unexpected escaped character value")
         }
     }
 
@@ -223,9 +225,11 @@ impl<const N: usize> NFA<N> {
     }
 
     /*const*/fn add_term(mut self, chara: Option<u8>) -> Self {
-        self.states[self.accept_idx] = self.states[self.accept_idx].add_transition(chara, self.state_count);
-        self.accept_idx = self.state_count;
-        self.state_count += 1;
+        // create two states: i and f; link them
+        self.start_idx = self.state_count;
+        self.accept_idx = self.state_count + 1;
+        self.states[self.start_idx] = self.states[self.start_idx].add_transition(chara, self.accept_idx);
+        self.state_count += 2;
         self
     }
 
@@ -283,6 +287,16 @@ impl<const N: usize> NFA<N> {
     //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
     //                 +-------+------+
     //
+    /*const*/fn product(mut self, chara: Option<u8>) -> Self {
+        self.state_count -= 1;
+
+        let last_start_idx = self.start_idx;
+        let mut nfa = self.add_term(chara);
+
+        nfa.start_idx = last_start_idx;
+
+        nfa
+    }
 
     // Rule 3.c: for the regular expression s*, construct an NFA:
     //
@@ -294,7 +308,7 @@ impl<const N: usize> NFA<N> {
     //                       ↘︎    +-------------+   ↗︎
     //                         ↘︎                  ↗︎
     //                             --->  ε  --->
-    /*const*/fn kleene_star(mut self, input: &'static [u8], idx: usize) -> (Self, usize) {
+    /*const*/fn kleene_star(mut self) -> Self {
         // 1. alloc two new states: i & f
         // 2. add a transition from i to start_idx on ε
         // 3. add a transition from i to f on ε
@@ -315,7 +329,7 @@ impl<const N: usize> NFA<N> {
         self.start_idx = i_idx;
         self.accept_idx = f_idx;
 
-        self.expr(input, idx + 1)
+        self
     }
 
     // Rule 3.d: for the regular expression (s), construct NFA(s), consuming the left and right parens.
@@ -331,6 +345,29 @@ impl<const N: usize> NFA<N> {
         }
 
         panic!("unterminated group, expected ')'");
+    }
+}
+
+/*const*/fn is_term_char(chara: &u8) -> bool {
+    match chara {
+        // Positively match the characters we expect from Σ.
+        chara @ (
+            b'a'..=b'z' |
+            b'A'..=b'Z' |
+            b'0'..=b'9' |
+            b'!' | b'@' |
+            b'#' | b'%' |
+            b'&' | b'-' |
+            b'=' | b'+' |
+            b';' | b':' |
+            b'"' | b',' |
+            b'<' | b'>' |
+            b'/' | b'`' |
+            b'~' | b' ' |
+            b'\''
+        ) => true,
+
+        _ => false
     }
 }
 
