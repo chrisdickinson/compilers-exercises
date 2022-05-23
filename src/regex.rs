@@ -1,4 +1,5 @@
 
+const TRANSITIONS_PER_STATE: usize = 4;
 
 #[derive(Clone, Copy, Default)]
 struct Transition {
@@ -9,7 +10,7 @@ struct Transition {
 #[derive(Clone, Copy)]
 struct State {
     transition_count: usize,
-    transitions: [Transition; 16],
+    transitions: [Transition; TRANSITIONS_PER_STATE],
 }
 
 impl Default for State {
@@ -87,7 +88,7 @@ impl<const N: usize> NFA<N> {
                 transitions: [Transition {
                     on_character: None,
                     to_state_idx: 0
-                }; 16]
+                }; TRANSITIONS_PER_STATE]
             }; N],
             state_count: 0,
             start_idx: 0,
@@ -292,7 +293,6 @@ impl<const N: usize> NFA<N> {
     //                 +-------+------+
     //
     /*const */fn product(mut self, last_start_idx: usize, last_accept_idx: usize) -> Self {
-
         // take all transitions out of start(N(t)) and add them to accept(N(s))
         // remove all transitions out of start(N(t))
 

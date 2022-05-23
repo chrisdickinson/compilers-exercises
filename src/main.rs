@@ -104,7 +104,7 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
 
     #[cfg(all())]
     {
-        let nfa = NFA::<256>::from_regex_bytes(b"(x|y|z)");
+        let nfa = NFA::<256>::from_regex_bytes(b"(x|y|z)*");
         nfa.debug_print(b"problem");
         puts("}\n");
         exit(1);
