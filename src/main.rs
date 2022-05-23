@@ -99,6 +99,9 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
     let nfa = NFA::<256>::from_regex_bytes(b"a*");
     nfa.debug_print(b"kleene");
 
+    let nfa = NFA::<256>::from_regex_bytes(b"ab*");
+    nfa.debug_print(b"kleene_product");
+
     // product + kleene star on last char
     let nfa = NFA::<256>::from_regex_bytes(b"apple*");
     nfa.debug_print(b"product_five_kleene");

@@ -90,7 +90,7 @@ impl<const N: usize> NFA<N> {
                     to_state_idx: 0
                 }; 16]
             }; N],
-            state_count: 1,
+            state_count: 0,
             start_idx: 0,
             accept_idx: 0,
         };
@@ -104,7 +104,7 @@ impl<const N: usize> NFA<N> {
         nfa
     }
 
-    /*const*/fn expr(self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
+    /*const*/fn expr(self, input: &'static [u8], idx: usize) -> (Self, usize) {
         /* Language:
          *
          *     expr ::= ε
@@ -130,62 +130,61 @@ impl<const N: usize> NFA<N> {
             return (self, idx)
         }
 
-        let mut nfa = self;
+        // what do we do with kleene_star?
+        // it must: bind to terminal characters more tightly than the product rule
+        //
+        dbgnfa(b"expr", &self);
+        let (mut nfa, mut idx) = self.term(input, idx);
+        let start_idx = nfa.start_idx;
 
         while idx < input.len() {
             let last_idx = idx;
-            (nfa, idx) = nfa.term(input, idx);
+
             (nfa, idx) = nfa.rest(input, idx);
             if last_idx == idx {
                 return (nfa, idx)
             }
         }
+        nfa.start_idx = start_idx;
 
         (nfa, input.len())
     }
 
-    /*const*/fn rest(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        let (mut nfa, mut idx) = (self, idx);
+    /*const*/fn term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+        dbgnfa(b"term", &self);
+        let (nfa, idx) = match input.get(idx) {
+            None => return (self, idx),
 
-        loop {
-            (nfa, idx) = match input.get(idx) {
-                Some(b'|') => nfa.alternate(input, idx),
-                Some(b'(') => nfa.group(input, idx),
-                Some(b'\\') => nfa.escaped_term(input, idx + 1),
-                Some(b'*') => (nfa.kleene_star(), idx + 1),
+            Some(b'\\') => self.escaped_term(input, idx + 1),
+            Some(chara) if is_term_char(chara) => (self.add_alphabet_term(*chara), idx + 1),
+            _ => (self.add_empty_term(), idx),
+        };
 
-                Some(chara) if is_term_char(chara) => {
-
-                    // artificially bind
-                    match input.get(idx + 1) {
-                        Some(b'*') => {
-                            nfa = nfa.add_alphabet_term(*chara).kleene_star();
-
-                            (nfa, idx + 2)
-                        },
-                        _ => (nfa.product(Some(*chara)), idx + 1)
-                    }
-                    // (nfa.product(Some(*chara)), idx + 1)
-                },
-
-                _ => return (nfa, idx)
-            };
+        if let Some(b'*') = input.get(idx) {
+            return (nfa.kleene_star(), idx + 1)
         }
+
+        (nfa, idx)
     }
 
-    /*const*/fn term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        match input.get(idx) {
-            Some(chara) if is_term_char(chara) => (self.add_alphabet_term(*chara), idx + 1),
-            None => (self.add_empty_term(), idx),
+    /*const*/fn rest(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+        dbgnfa(b"rest", &self);
+        let (mut nfa, mut idx) = (self, idx);
 
-            _ => (self, idx)
-        }
+        let last_accept_idx = nfa.accept_idx;
+        (nfa, idx) = match input.get(idx) {
+            Some(b'(') => nfa.group(input, idx),
+            Some(b'|') => nfa.alternate(input, idx),
+            _ => nfa.term(input, idx)
+        };
+
+        (nfa.product(last_accept_idx), idx)
     }
 
     /*const*/fn escaped_term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
         match input.get(idx).copied() {
-            Some(b'n') => (self.product(Some(b'\n')), idx + 1),
-            Some(b't') => (self.product(Some(b'\t')), idx + 1),
+            Some(b'n') => (self.add_alphabet_term(b'\n'), idx + 1),
+            Some(b't') => (self.add_alphabet_term(b'\t'), idx + 1),
 
             Some(chara @ (
                 b'$' | b'^' |
@@ -195,7 +194,7 @@ impl<const N: usize> NFA<N> {
                 b'|' | b'?' |
                 b'*' | 
                 b'\\'
-            )) => (self.product(Some(chara)), idx + 1),
+            )) => (self.add_alphabet_term(chara), idx + 1),
 
             None => panic!("unexpected end of input: expected escaped character"),
             _ => panic!("unexpected escaped character value")
@@ -287,15 +286,17 @@ impl<const N: usize> NFA<N> {
     //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
     //                 +-------+------+
     //
-    /*const*/fn product(mut self, chara: Option<u8>) -> Self {
-        self.state_count -= 1;
+    /*const*/fn product(mut self, last_accept_idx: usize) -> Self {
 
-        let last_start_idx = self.start_idx;
-        let mut nfa = self.add_term(chara);
+        // take all transitions out of start(N(t)) and add them to accept(N(s))
+        // remove all transitions out of start(N(t))
 
-        nfa.start_idx = last_start_idx;
-
-        nfa
+        for i in 0..self.states[self.start_idx].transition_count {
+            self.states[last_accept_idx].transitions[self.states[last_accept_idx].transition_count] = self.states[self.start_idx].transitions[i];
+            self.states[last_accept_idx].transition_count += 1;
+        }
+        self.states[self.start_idx].transition_count = 0;
+        self
     }
 
     // Rule 3.c: for the regular expression s*, construct an NFA:
@@ -309,6 +310,7 @@ impl<const N: usize> NFA<N> {
     //                         ↘︎                  ↗︎
     //                             --->  ε  --->
     /*const*/fn kleene_star(mut self) -> Self {
+        dbgnfa(b"kleene_star", &self);
         // 1. alloc two new states: i & f
         // 2. add a transition from i to start_idx on ε
         // 3. add a transition from i to f on ε
@@ -369,6 +371,21 @@ impl<const N: usize> NFA<N> {
 
         _ => false
     }
+}
+
+fn dbgnfa<const N: usize>(prefix: &[u8], nfa: &NFA<N>) {
+    use crate::io::{itoa, eputs};
+    eputs("\x1b[33m");
+    eputs(prefix);
+    eputs("\x1b[0m: NFA<");
+    eputs(itoa(N as u32));
+    eputs("> { start_idx: ");
+    eputs(itoa(nfa.start_idx as u32));
+    eputs(", accept_idx: ");
+    eputs(itoa(nfa.accept_idx as u32));
+    eputs(", state_count: ");
+    eputs(itoa(nfa.state_count as u32));
+    eputs("}\n");
 }
 
 fn error_input_progress(input: &'static [u8], idx: usize) {
