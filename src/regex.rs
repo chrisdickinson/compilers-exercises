@@ -53,7 +53,6 @@ impl<const N: usize> Default for NFA<N> {
 // Input: a regular expression r over an alphabet Σ
 // Output: an NFA N accepting L(r)
 impl<const N: usize> NFA<N> {
-
     pub(crate) fn debug_print(&self, prefix: &'static [u8]) {
         use crate::io::{ itoa, puts };
 
@@ -387,6 +386,30 @@ fn dbgnfa<const N: usize>(prefix: &[u8], nfa: &NFA<N>) {
     eputs(", state_count: ");
     eputs(itoa(nfa.state_count as u32));
     eputs("}\n");
+
+
+    for (idx, state) in nfa.states[0..nfa.state_count].iter().enumerate() {
+        eputs("  ");
+        eputs(if idx == nfa.start_idx {
+            "^"
+        } else if idx == nfa.accept_idx {
+            "$"
+        } else {
+            "-"
+        });
+        eputs(" S"); eputs(itoa(idx as u32)); eputs(": {");
+        for transition in &state.transitions[0..state.transition_count] {
+            if let Some(xs) = transition.on_character {
+                eputs([xs]);
+            } else {
+                eputs("ε");
+            }
+            eputs("→");
+            eputs(itoa(transition.to_state_idx as u32));
+            eputs(", ");
+        }
+        eputs("}\n");
+    }
 }
 
 fn error_input_progress(input: &'static [u8], idx: usize) {

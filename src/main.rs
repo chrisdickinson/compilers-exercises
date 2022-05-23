@@ -83,11 +83,14 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
 
     puts("digraph {\n");
     puts("rankdir=\"TB\";\n");
-    let nfa = NFA::<256>::from_regex_bytes(b"appl(e|b)anana");
-    nfa.debug_print(b"alternate");
-    puts("}\n");
 
-    exit(1);
+    #[cfg(all())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"(b|c|d)");
+        nfa.debug_print(b"problem");
+        puts("}\n");
+        exit(1);
+    }
 
     let nfa = NFA::<256>::from_regex_bytes(b"");
     nfa.debug_print(b"empty");
