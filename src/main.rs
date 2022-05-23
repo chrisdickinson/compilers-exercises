@@ -1,6 +1,8 @@
 #![no_std]
 #![feature(lang_items)]
 #![no_main]
+#![feature(const_slice_index)]
+#![feature(const_option)]
 
 mod io;
 mod sys;
@@ -84,9 +86,25 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const char) {
     puts("digraph {\n");
     puts("rankdir=\"TB\";\n");
 
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"a(b|c)");
+        nfa.debug_print(b"problem");
+        puts("}\n");
+        exit(1);
+    }
+
+    #[cfg(any())]
+    {
+        let nfa = NFA::<256>::from_regex_bytes(b"a(b|c)*");
+        nfa.debug_print(b"problem");
+        puts("}\n");
+        exit(1);
+    }
+
     #[cfg(all())]
     {
-        let nfa = NFA::<256>::from_regex_bytes(b"(b|c|d)");
+        let nfa = NFA::<256>::from_regex_bytes(b"(x|y|z)");
         nfa.debug_print(b"problem");
         puts("}\n");
         exit(1);
