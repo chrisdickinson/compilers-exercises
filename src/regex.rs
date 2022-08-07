@@ -1,14 +1,17 @@
 const TRANSITIONS_PER_STATE: usize = 4;
 
+// Depending on the N parameter to NFA, we can use smaller types to represent indices.
+type NFASize = u8;
+
 #[derive(Clone, Copy, Default)]
 struct Transition {
     on_character: Option<u8>,
-    to_state_idx: usize
+    to_state_idx: NFASize
 }
 
 #[derive(Clone, Copy)]
 struct State {
-    transition_count: usize,
+    transition_count: NFASize,
     transitions: [Transition; TRANSITIONS_PER_STATE],
 }
 
@@ -22,9 +25,9 @@ impl Default for State {
 }
 
 impl State {
-    const fn add_transition(mut self, on_character: Option<u8>, to_state_idx: usize) -> Self {
-        self.transitions[self.transition_count].on_character = on_character;
-        self.transitions[self.transition_count].to_state_idx = to_state_idx;
+    const fn add_transition(mut self, on_character: Option<u8>, to_state_idx: NFASize) -> Self {
+        self.transitions[self.transition_count as usize].on_character = on_character;
+        self.transitions[self.transition_count as usize].to_state_idx = to_state_idx;
         self.transition_count += 1;
         self
     }
@@ -34,9 +37,9 @@ impl State {
 /// # NFA: Nondeterministic Finite Automaton
 pub(crate) struct NFA<const N: usize> {
     states: [State; N],
-    state_count: usize,
-    accept_idx: usize,
-    start_idx: usize,
+    state_count: NFASize,
+    accept_idx: NFASize,
+    start_idx: NFASize,
 }
 
 impl<const N: usize> Default for NFA<N> {
@@ -70,7 +73,6 @@ impl<const N: usize> NFA<N> {
 
         let (nfa, idx) = nfa.expr(input, 0);
         if idx != input.len() {
-            //error_input_progress(input, idx);
             panic!("unexpected character");
         }
 
@@ -79,24 +81,15 @@ impl<const N: usize> NFA<N> {
 
     /* Language:
      *
-     *     expr ::= ε
-     *        | 𝛼 in Σ
-     *        | expr "|" expr
-     *        | expr expr
-     *        | expr "*"
-     *        | "(" expr ")"
-     *
-     * Rewritten to avoid left recursion:
-     *
-     *     expr -> term rest
-     *     rest -> "|" expr
-     *           | "*" expr
-     *           | "(" expr ")"
-     *           | "\\" term
-     *           | term
-     *     term -> "\\" <any>
-     *           | 𝛼 in Σ
-     *           | ε
+     *     expr     -> term rest
+     *     rest     -> "|" expr
+     *               | "(" expr ")" postfix
+     *               | term
+     *     term     -> "\\" <any> postfix
+     *               | 𝛼 in Σ postfix
+     *               | ε
+     *     postfix -> "*"
+     *               | ε
      */
     const fn expr(mut self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
         (self, idx) = self.term(input, idx);
@@ -112,10 +105,8 @@ impl<const N: usize> NFA<N> {
         (self, input.len())
     }
 
-    const fn term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        let (nfa, idx) = match input.get(idx) {
-            None => return (self, idx),
-
+    const fn term(mut self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
+        (self, idx) = match input.get(idx) {
             Some(b'\\') => self.escaped_term(input, idx + 1),
             Some(chara @ (
                 b'a'..=b'z' |
@@ -132,16 +123,20 @@ impl<const N: usize> NFA<N> {
                 b'~' | b' ' |
                 b'\''
             )) => (self.add_alphabet_term(*chara), idx + 1),
-            _ => {
-                return (self.add_empty_term(), idx)
-            },
+
+            None => return (self, idx),
+            _ => return (self.add_empty_term(), idx),
         };
 
+        self.postfix(input, idx)
+    }
+
+    const fn postfix(self, input: &'static [u8], idx: usize) -> (Self, usize) {
         if let Some(b'*') = input.get(idx) {
-            return (nfa.kleene_star(), idx + 1)
+            return (self.kleene_star(), idx + 1)
         }
 
-        (nfa, idx)
+        (self, idx)
     }
 
     const fn rest(self, input: &'static [u8], idx: usize) -> (Self, usize) {
@@ -150,7 +145,6 @@ impl<const N: usize> NFA<N> {
         let last_start_idx = nfa.start_idx;
         let last_accept_idx = nfa.accept_idx;
         match input.get(idx) {
-            Some(b'*') => (nfa.kleene_star(), idx + 1),
             Some(b'(') => nfa.group(input, idx),
             Some(b'|') => nfa.alternate(input, idx),
             _ => {
@@ -206,7 +200,7 @@ impl<const N: usize> NFA<N> {
         // create two states: i and f; link them
         self.start_idx = self.state_count;
         self.accept_idx = self.state_count + 1;
-        self.states[self.start_idx] = self.states[self.start_idx].add_transition(chara, self.accept_idx);
+        self.states[self.start_idx as usize] = self.states[self.start_idx as usize].add_transition(chara, self.accept_idx);
         self.state_count += 2;
         self
     }
@@ -247,11 +241,11 @@ impl<const N: usize> NFA<N> {
         let f_idx = self.state_count + 1;
         self.state_count += 2;
 
-        self.states[i_idx] = self.states[i_idx].add_transition(None, prev_start_idx);
-        self.states[i_idx] = self.states[i_idx].add_transition(None, self.start_idx);
+        self.states[i_idx as usize] = self.states[i_idx as usize].add_transition(None, prev_start_idx);
+        self.states[i_idx as usize] = self.states[i_idx as usize].add_transition(None, self.start_idx);
 
-        self.states[prev_accept_idx] = self.states[prev_accept_idx].add_transition(None, f_idx);
-        self.states[self.accept_idx] = self.states[self.accept_idx].add_transition(None, f_idx);
+        self.states[prev_accept_idx as usize] = self.states[prev_accept_idx as usize].add_transition(None, f_idx);
+        self.states[self.accept_idx as usize] = self.states[self.accept_idx as usize].add_transition(None, f_idx);
 
         self.start_idx = i_idx;
         self.accept_idx = f_idx;
@@ -265,17 +259,17 @@ impl<const N: usize> NFA<N> {
     //     start ----> Ⓘ  N(s) ○ N(t) Ⓕ
     //                 +-------+------+
     //
-    const fn product(mut self, last_start_idx: usize, last_accept_idx: usize) -> Self {
+    const fn product(mut self, last_start_idx: NFASize, last_accept_idx: NFASize) -> Self {
         // take all transitions out of start(N(t)) and add them to accept(N(s))
         // remove all transitions out of start(N(t))
 
         let mut idx = 0;
-        while idx < self.states[self.start_idx].transition_count {
-            self.states[last_accept_idx].transitions[self.states[last_accept_idx].transition_count] = self.states[self.start_idx].transitions[idx];
-            self.states[last_accept_idx].transition_count += 1;
+        while idx < self.states[self.start_idx as usize].transition_count {
+            self.states[last_accept_idx as usize].transitions[self.states[last_accept_idx as usize].transition_count as usize] = self.states[self.start_idx as usize].transitions[idx as usize];
+            self.states[last_accept_idx as usize].transition_count += 1;
             idx += 1;
         }
-        self.states[self.start_idx].transition_count = 0;
+        self.states[self.start_idx as usize].transition_count = 0;
         self.start_idx = last_start_idx;
         self
     }
@@ -302,11 +296,11 @@ impl<const N: usize> NFA<N> {
         let f_idx = self.state_count + 1;
         self.state_count += 2;
 
-        self.states[i_idx] = self.states[i_idx].add_transition(None, self.start_idx);
-        self.states[i_idx] = self.states[i_idx].add_transition(None, f_idx);
+        self.states[i_idx as usize] = self.states[i_idx as usize].add_transition(None, self.start_idx);
+        self.states[i_idx as usize] = self.states[i_idx as usize].add_transition(None, f_idx);
 
-        self.states[self.accept_idx] = self.states[self.accept_idx].add_transition(None, self.start_idx);
-        self.states[self.accept_idx] = self.states[self.accept_idx].add_transition(None, f_idx);
+        self.states[self.accept_idx as usize] = self.states[self.accept_idx as usize].add_transition(None, self.start_idx);
+        self.states[self.accept_idx as usize] = self.states[self.accept_idx as usize].add_transition(None, f_idx);
 
         self.start_idx = i_idx;
         self.accept_idx = f_idx;
@@ -315,17 +309,18 @@ impl<const N: usize> NFA<N> {
     }
 
     // Rule 3.d: for the regular expression (s), construct NFA(s), consuming the left and right parens.
-    const fn group(self, input: &'static [u8], idx: usize) -> (Self, usize) {
+    const fn group(mut self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
         if input[idx] != b'(' {
             panic!("expected '('");
         }
 
         let last_start_idx = self.start_idx;
         let last_accept_idx = self.accept_idx;
-        let (nfa, idx) = self.expr(input, idx + 1);
+        (self, idx) = self.expr(input, idx + 1);
 
         if let Some(b')') = input.get(idx) {
-            return (nfa.product(last_start_idx, last_accept_idx), idx + 1);
+            (self, idx) = self.postfix(input, idx + 1);
+            return (self.product(last_start_idx, last_accept_idx), idx);
         }
 
         panic!("unterminated group, expected ')'");
@@ -339,8 +334,8 @@ impl<const N: usize> NFA<N> {
         puts("  rankdir=\"LR\";\n");
         puts("  "); puts(prefix); puts(itoa(self.start_idx as u32)); puts(" [shape=box];\n");
         puts("  "); puts(prefix); puts(itoa(self.accept_idx as u32)); puts(" [shape=doublecircle];\n");
-        for (idx, state) in self.states[0..self.state_count].iter().enumerate() {
-            for transition in &state.transitions[0..state.transition_count] {
+        for (idx, state) in self.states[0..self.state_count as usize].iter().enumerate() {
+            for transition in &state.transitions[0..state.transition_count as usize] {
 
                 puts("  "); puts(prefix); puts(itoa(transition.to_state_idx as u32)); puts("[label=\"S"); puts(itoa(transition.to_state_idx as u32)); puts("\"];\n");
                 puts("  "); puts(prefix); puts(itoa(idx as u32)); puts(" -> ");  puts(prefix); puts(itoa(transition.to_state_idx as u32));
@@ -374,17 +369,17 @@ fn dbgnfa<const N: usize>(prefix: &[u8], nfa: &NFA<N>) {
     eputs("}\n");
 
 
-    for (idx, state) in nfa.states[0..nfa.state_count].iter().enumerate() {
+    for (idx, state) in nfa.states[0..nfa.state_count as usize].iter().enumerate() {
         eputs("  ");
-        eputs(if idx == nfa.start_idx {
+        eputs(if idx == nfa.start_idx as usize {
             "^ "
-        } else if idx == nfa.accept_idx {
+        } else if idx == nfa.accept_idx as usize {
             "$ "
         } else {
             "- "
         });
         eputs(itoa(idx as u32)); eputs(": {");
-        for transition in &state.transitions[0..state.transition_count] {
+        for transition in &state.transitions[0..state.transition_count as usize] {
             if let Some(xs) = transition.on_character {
                 eputs([xs]);
             } else {

@@ -7,6 +7,9 @@ edition = "2021"
 
 [profile.dev]
 panic = "abort"
+opt-level = 0
+lto = "off"
+incremental = false
 
 [profile.release]
 strip = "symbols"
