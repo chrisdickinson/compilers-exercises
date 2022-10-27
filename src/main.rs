@@ -5,8 +5,8 @@
 #![feature(const_option)]
 
 mod io;
-mod sys;
 mod regex;
+mod sys;
 
 use crate::io::{getc, putc, puts};
 use crate::sys::exit;
@@ -77,15 +77,17 @@ fn term() {
 }
 
 #[no_mangle]
+/// # Safety
+/// ... is an illusion
 pub unsafe extern "C" fn main() {
-    use crate::regex::NFA;
+    use crate::regex::Nfa;
 
     puts("digraph {\n");
     puts("rankdir=\"TB\";\n");
 
     #[cfg(any())]
     {
-        let nfa = NFA::<256>::from_regex_bytes(b"a(b|c)");
+        let nfa = Nfa::<256>::from_regex_bytes(b"a(b|c)");
         nfa.debug_print(b"problem");
         puts("}\n");
         exit(1);
@@ -93,7 +95,7 @@ pub unsafe extern "C" fn main() {
 
     #[cfg(any())]
     {
-        let nfa = NFA::<256>::from_regex_bytes(b"a(b|c)*");
+        let nfa = Nfa::<256>::from_regex_bytes(b"a(b|c)*");
         nfa.debug_print(b"problem");
         puts("}\n");
         exit(1);
@@ -101,59 +103,59 @@ pub unsafe extern "C" fn main() {
 
     #[cfg(any())]
     {
-        let nfa = NFA::<256>::from_regex_bytes(b"(x|y|z)*");
+        let nfa = Nfa::<256>::from_regex_bytes(b"(x|y|z)*");
         nfa.debug_print(b"problem");
         puts("}\n");
         exit(1);
     }
 
-    let nfa = NFA::<256>::from_regex_bytes(b"");
+    let nfa = Nfa::<256>::from_regex_bytes(b"");
     nfa.debug_print(b"empty");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"a");
+    let nfa = Nfa::<256>::from_regex_bytes(b"a");
     nfa.debug_print(b"single_char");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"ab");
+    let nfa = Nfa::<256>::from_regex_bytes(b"ab");
     nfa.debug_print(b"product");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"apple");
+    let nfa = Nfa::<256>::from_regex_bytes(b"apple");
     nfa.debug_print(b"product_five");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"a*");
+    let nfa = Nfa::<256>::from_regex_bytes(b"a*");
     nfa.debug_print(b"kleene");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"ab*");
+    let nfa = Nfa::<256>::from_regex_bytes(b"ab*");
     nfa.debug_print(b"kleene_product");
 
     // product + kleene star on last char
-    let nfa = NFA::<256>::from_regex_bytes(b"apple*");
+    let nfa = Nfa::<256>::from_regex_bytes(b"apple*");
     nfa.debug_print(b"product_five_kleene");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"ap*le*");
+    let nfa = Nfa::<256>::from_regex_bytes(b"ap*le*");
     nfa.debug_print(b"multi_product_multi_kleene");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"apple|banana");
+    let nfa = Nfa::<256>::from_regex_bytes(b"apple|banana");
     nfa.debug_print(b"alternate");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"apple|banana*");
+    let nfa = Nfa::<256>::from_regex_bytes(b"apple|banana*");
     nfa.debug_print(b"alternate_kleene");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"ap*le|bana*na");
+    let nfa = Nfa::<256>::from_regex_bytes(b"ap*le|bana*na");
     nfa.debug_print(b"alternate_interstitial_kleene");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"apple|banana|cat");
+    let nfa = Nfa::<256>::from_regex_bytes(b"apple|banana|cat");
     nfa.debug_print(b"alternate_alternate");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"wow(apple)cat");
+    let nfa = Nfa::<256>::from_regex_bytes(b"wow(apple)cat");
     nfa.debug_print(b"product_group_product");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"(apple|banana) cat");
+    let nfa = Nfa::<256>::from_regex_bytes(b"(apple|banana) cat");
     nfa.debug_print(b"group_alternate_concat");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"(apple|banana)*");
+    let nfa = Nfa::<256>::from_regex_bytes(b"(apple|banana)*");
     nfa.debug_print(b"group_alternate_star");
 
-    let nfa = NFA::<256>::from_regex_bytes(b"(apple|banana)|cat");
+    let nfa = Nfa::<256>::from_regex_bytes(b"(apple|banana)|cat");
     nfa.debug_print(b"group_alternate_alternate");
     puts("}\n");
 
