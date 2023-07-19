@@ -63,7 +63,7 @@ impl<const N: usize> Default for Nfa<N> {
     }
 }
 
-fn ε_closure<const N: usize>(n: &Nfa<N>) -> Dfa<N> {
+fn ε_closure<const N: usize>(_n: &Nfa<N>) -> Dfa<N> {
     /*
      * T is a set of NFA states
      * push all states in T onto stack
@@ -140,34 +140,35 @@ impl<const N: usize> Nfa<N> {
     }
 
     const fn term(mut self, input: &'static [u8], mut idx: usize) -> (Self, usize) {
-        (self, idx) = match input.get(idx) {
-            Some(b'\\') => self.escaped_term(input, idx + 1),
-            Some(
-                chara @ (b'a'..=b'z'
-                | b'A'..=b'Z'
-                | b'0'..=b'9'
-                | b'!'
-                | b'@'
-                | b'#'
-                | b'%'
-                | b'&'
-                | b'-'
-                | b'='
-                | b'+'
-                | b';'
-                | b':'
-                | b'"'
-                | b','
-                | b'<'
-                | b'>'
-                | b'/'
-                | b'`'
-                | b'~'
-                | b' '
-                | b'\''),
-            ) => (self.add_alphabet_term(*chara), idx + 1),
+        if idx >= input.len() {
+            return (self, idx);
+        }
 
-            None => return (self, idx),
+        (self, idx) = match input[idx] {
+            b'\\' => self.escaped_term(input, idx + 1),
+            chara @ (b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'!'
+            | b'@'
+            | b'#'
+            | b'%'
+            | b'&'
+            | b'-'
+            | b'='
+            | b'+'
+            | b';'
+            | b':'
+            | b'"'
+            | b','
+            | b'<'
+            | b'>'
+            | b'/'
+            | b'`'
+            | b'~'
+            | b' '
+            | b'\'') => (self.add_alphabet_term(chara), idx + 1),
+
             _ => return (self.add_empty_term(), idx),
         };
 
@@ -175,7 +176,11 @@ impl<const N: usize> Nfa<N> {
     }
 
     const fn postfix(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        if let Some(b'*') = input.get(idx) {
+        if idx >= input.len() {
+            return (self, idx);
+        }
+
+        if b'*' == input[idx] {
             return (self.kleene_star(), idx + 1);
         }
 
@@ -187,9 +192,13 @@ impl<const N: usize> Nfa<N> {
 
         let last_start_idx = nfa.start_idx;
         let last_accept_idx = nfa.accept_idx;
-        match input.get(idx) {
-            Some(b'(') => nfa.group(input, idx),
-            Some(b'|') => nfa.alternate(input, idx),
+        if idx >= input.len() {
+            (nfa, idx) = nfa.term(input, idx);
+            return (nfa.product(last_start_idx, last_accept_idx), idx);
+        }
+        match input[idx] {
+            b'(' => nfa.group(input, idx),
+            b'|' => nfa.alternate(input, idx),
             _ => {
                 (nfa, idx) = nfa.term(input, idx);
                 (nfa.product(last_start_idx, last_accept_idx), idx)
@@ -198,16 +207,17 @@ impl<const N: usize> Nfa<N> {
     }
 
     const fn escaped_term(self, input: &'static [u8], idx: usize) -> (Self, usize) {
-        match input.get(idx).copied() {
-            Some(b'n') => (self.add_alphabet_term(b'\n'), idx + 1),
-            Some(b't') => (self.add_alphabet_term(b'\t'), idx + 1),
+        if idx >= input.len() {
+            panic!("unexpected end of input: expected escaped character");
+        }
 
-            Some(
-                chara @ (b'$' | b'^' | b'(' | b')' | b'{' | b'}' | b'[' | b']' | b'|' | b'?' | b'*'
-                | b'\\'),
-            ) => (self.add_alphabet_term(chara), idx + 1),
+        match input[idx] {
+            b'n' => (self.add_alphabet_term(b'\n'), idx + 1),
+            b't' => (self.add_alphabet_term(b'\t'), idx + 1),
 
-            None => panic!("unexpected end of input: expected escaped character"),
+            chara @ (b'$' | b'^' | b'(' | b')' | b'{' | b'}' | b'[' | b']' | b'|' | b'?' | b'*'
+            | b'\\') => (self.add_alphabet_term(chara), idx + 1),
+
             _ => panic!("unexpected escaped character value"),
         }
     }
@@ -366,7 +376,11 @@ impl<const N: usize> Nfa<N> {
         let last_accept_idx = self.accept_idx;
         (self, idx) = self.expr(input, idx + 1);
 
-        if let Some(b')') = input.get(idx) {
+        if idx >= input.len() {
+            panic!("unexpected end of stream: unterminated group, expected ')'");
+        }
+
+        if b')' == input[idx] {
             (self, idx) = self.postfix(input, idx + 1);
             return (self.product(last_start_idx, last_accept_idx), idx);
         }

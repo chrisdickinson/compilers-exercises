@@ -1,6 +1,6 @@
 use crate::sys::syscall3;
-use core::convert::From;
 use core::cmp::Ordering;
+use core::convert::From;
 
 static mut STDIN: Option<InputBuffer<4096>> = None;
 static mut STDOUT: Option<OutputBuffer<4096>> = None;
@@ -28,24 +28,21 @@ pub(crate) trait Write {
 
 pub(crate) struct Cursor<'a> {
     offset: usize,
-    ptr: &'a [u8]
+    ptr: &'a [u8],
 }
 
 impl<'a, 'b: 'a> From<&'b str> for Cursor<'a> {
     fn from(input: &'a str) -> Self {
         Self {
             offset: 0,
-            ptr: input.as_bytes()
+            ptr: input.as_bytes(),
         }
     }
 }
 
 impl<'a, 'b: 'a> From<&'b [u8]> for Cursor<'a> {
     fn from(ptr: &'a [u8]) -> Self {
-        Self {
-            offset: 0,
-            ptr
-        }
+        Self { offset: 0, ptr }
     }
 }
 
@@ -93,7 +90,7 @@ struct InputBuffer<const N: usize> {
     buf: [u8; N],
     cursor: usize,
     eofidx: usize,
-    fd: usize
+    fd: usize,
 }
 
 impl<const N: usize> InputBuffer<N> {
@@ -130,7 +127,7 @@ impl<const N: usize> Read for InputBuffer<N> {
     fn getc(&mut self) -> Option<u8> {
         let ch = self.buf[self.cursor];
         let last = self.cursor;
-        self.cursor = (self.cursor + 1) & N - 1;
+        self.cursor = (self.cursor + 1) & (N - 1);
 
         if self.cursor == 0 || self.cursor == Self::MIDPOINT {
             self.fill();
@@ -168,7 +165,7 @@ struct OutputBuffer<const N: usize> {
     last_flushed_idx: usize,
 
     /// A file descriptor.
-    fd: usize
+    fd: usize,
 }
 
 impl<const N: usize> OutputBuffer<N> {
@@ -185,7 +182,7 @@ impl<const N: usize> OutputBuffer<N> {
             next_write_idx: 0,
             last_flushed_idx: Self::MODULO_MASK,
             buf: [0u8; N],
-            fd
+            fd,
         }
     }
 
@@ -205,13 +202,13 @@ impl<const N: usize> OutputBuffer<N> {
         Some(match self.next_write_idx.cmp(&self.last_flushed_idx) {
             Ordering::Equal => {
                 panic!("next_write_idx matches last_flushed_idx; this should never happen")
-            },
+            }
 
             Ordering::Less => {
                 if self.last_flushed_idx == Self::MODULO_MASK {
                     let slice = &self.buf[0..self.next_write_idx];
                     if slice.is_empty() {
-                        return None
+                        return None;
                     }
 
                     self.last_flushed_idx = (self.next_write_idx - 1) & Self::MODULO_MASK;
@@ -220,7 +217,7 @@ impl<const N: usize> OutputBuffer<N> {
                 } else {
                     let slice = &self.buf[(self.last_flushed_idx + 1)..];
                     if slice.is_empty() {
-                        return None
+                        return None;
                     }
 
                     self.last_flushed_idx = Self::MODULO_MASK;
@@ -232,7 +229,7 @@ impl<const N: usize> OutputBuffer<N> {
             Ordering::Greater => {
                 let slice = &self.buf[self.last_flushed_idx + 1..self.next_write_idx];
                 if slice.is_empty() {
-                    return None
+                    return None;
                 }
 
                 self.last_flushed_idx = self.next_write_idx - 1;
@@ -258,13 +255,19 @@ impl<const N: usize> Write for OutputBuffer<N> {
         // not working today. at the very least this is the generic cast so we can handle writes
         // >N.
         let start = self.next_write_idx;
-        let mut flush_idx = self.last_flushed_idx.checked_sub(1).unwrap_or(Self::MODULO_MASK);
+        let mut flush_idx = self
+            .last_flushed_idx
+            .checked_sub(1)
+            .unwrap_or(Self::MODULO_MASK);
         for (offset, byte) in bytes.iter().enumerate() {
             let idx = (start + offset) & Self::MODULO_MASK;
             if idx == flush_idx {
                 self.next_write_idx = idx;
                 self.flush();
-                flush_idx = self.last_flushed_idx.checked_sub(1).unwrap_or(Self::MODULO_MASK);
+                flush_idx = self
+                    .last_flushed_idx
+                    .checked_sub(1)
+                    .unwrap_or(Self::MODULO_MASK);
             }
             self.buf[idx] = *byte;
         }
@@ -328,7 +331,7 @@ pub(crate) fn itoa(input: u32) -> &'static str {
 
     if input == 0 {
         unsafe { OUTBUF[0] = b'0' };
-        return unsafe { ::core::str::from_utf8_unchecked(&OUTBUF[0..1]) }
+        return unsafe { ::core::str::from_utf8_unchecked(&OUTBUF[0..1]) };
     }
 
     let mut input = input;
